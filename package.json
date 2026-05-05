@@ -8,16 +8,26 @@
     "dev": "nodemon server.js",
     "build": "npm install"
   },
-  "keywords": ["tourist", "safety", "mongodb", "express", "api"],
+  "keywords": [
+    "tourist",
+    "safety",
+    "mongodb",
+    "express",
+    "api"
+  ],
   "author": "Tourist Safety Team",
   "license": "MIT",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "firebase-admin": "^13.8.0",
     "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.0.0",
     "morgan": "^1.10.0",
+    "socket.io": "^4.8.3",
     "winston": "^3.11.0"
   },
   "engines": {

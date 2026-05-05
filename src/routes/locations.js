@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { updateLocation, getLocationHistory, getLatestLocation, getNearbyTourists } = require('../controllers/locationController');
+const { protect } = require('../middleware/authMiddleware');
 
 // POST /api/locations/update
-router.post('/update', updateLocation);
+router.post('/update', protect, updateLocation);
 
 // GET /api/locations/history/:tourist_id
 router.get('/history/:tourist_id', getLocationHistory);

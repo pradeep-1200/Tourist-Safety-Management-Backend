@@ -5,10 +5,10 @@ const logger = require('../utils/logger');
 const { generateAlertId } = require('../utils/helpers');
 const notificationService = require('../services/notificationService');
 
-// Create Panic Alert
 const createPanicAlert = async (req, res) => {
   try {
-    const { tourist_id, latitude, longitude, address } = req.body;
+    const { latitude, longitude, address } = req.body;
+    const tourist_id = req.user ? req.user._id : req.body.tourist_id;
 
     if (!tourist_id || !latitude || !longitude) {
       return res.status(400).json({
@@ -42,8 +42,40 @@ const createPanicAlert = async (req, res) => {
 
     await alert.save();
 
-    // Send notifications
-    await notificationService.sendPanicAlert(tourist, alert);
+    // Update tourist status to DANGER
+    tourist.status = 'DANGER';
+    await tourist.save();
+
+    // Emit real-time event via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('new_alert', {
+        id: alert._id,
+        type: alert.type,
+        severity: alert.severity,
+        timestamp: alert.timestamp,
+        tourist: {
+          id: tourist._id,
+          name: tourist.name,
+          phone: tourist.phone
+        },
+        location: alert.location,
+        address: alert.address
+      });
+    }
+
+    // Send FCM notification
+    if (tourist.fcm_token) {
+      try {
+        await notificationService.sendNotification(
+          tourist.fcm_token,
+          "🚨 Emergency Alert",
+          "SOS triggered! Authorities notified."
+        );
+      } catch (err) {
+        logger.error('Failed to send FCM for SOS:', err);
+      }
+    }
 
     // Create audit log
     await AuditLog.create({
@@ -120,7 +152,30 @@ const getTouristAlerts = async (req, res) => {
   }
 };
 
+// Get All Active Alerts (For Police Dashboard)
+const getAllAlerts = async (req, res) => {
+  try {
+    const alerts = await Alert.find()
+      .populate('tourist_id', 'name phone passport_no')
+      .sort({ timestamp: -1 })
+      .limit(50);
+
+    res.json({
+      success: true,
+      alerts,
+      count: alerts.length
+    });
+  } catch (error) {
+    logger.error('Get all alerts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 module.exports = {
   createPanicAlert,
-  getTouristAlerts
+  getTouristAlerts,
+  getAllAlerts
 };

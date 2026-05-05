@@ -1,0 +1,1 @@
+require('dotenv').config({path: './.env'}); const mongoose = require('mongoose'); const Tourist = require('./src/models/Tourist'); mongoose.connect(process.env.MONGODB_URI).then(async () => { await Tourist.updateOne({ _id: 'TID0001' }, { $set: { valid_to: new Date('2028-12-31T23:59:59Z'), status: 'active' } }); console.log('Updated'); mongoose.disconnect(); })

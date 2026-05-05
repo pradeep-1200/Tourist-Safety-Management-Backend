@@ -4,12 +4,12 @@ const Alert = require('../models/Alert');
 const logger = require('../utils/logger');
 const { checkGeofence } = require('../services/geofenceService');
 const { generateLocationId, generateAlertId } = require('../utils/helpers');
+const notificationService = require('../services/notificationService');
 
 // Update Tourist Location
 const updateLocation = async (req, res) => {
   try {
     const {
-      tourist_id,
       latitude,
       longitude,
       address,
@@ -18,6 +18,8 @@ const updateLocation = async (req, res) => {
       speed,
       heading
     } = req.body;
+
+    const tourist_id = req.user ? req.user._id : req.body.tourist_id;
 
     // Validate input
     if (!tourist_id || !latitude || !longitude) {
@@ -61,8 +63,8 @@ const updateLocation = async (req, res) => {
 
     await location.save();
 
-    // Update tourist's last seen
-    await tourist.updateLastSeen();
+    // Update tourist's last seen and live location
+    await tourist.updateLocation(longitude, latitude);
 
     // Check for geofence violations
     const geofenceResult = await checkGeofence(longitude, latitude);
@@ -85,12 +87,50 @@ const updateLocation = async (req, res) => {
 
       await alert.save();
 
+      // Update tourist status on high/critical severity
+      if (geofenceResult.severity === 'critical' || geofenceResult.severity === 'high') {
+        tourist.status = 'DANGER';
+        await tourist.save();
+      }
+
+      // Emit real-time geofence alert via Socket.IO
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new_alert', {
+          id: alert._id,
+          type: alert.type,
+          severity: alert.severity,
+          timestamp: alert.timestamp,
+          tourist: {
+            id: tourist._id,
+            name: tourist.name,
+            phone: tourist.phone
+          },
+          location: alert.location,
+          address: alert.address,
+          zone: geofenceResult.zoneName
+        });
+      }
+
       logger.warn('Geofence violation detected', {
         touristId: tourist_id,
         zone: geofenceResult.zoneName,
         severity: geofenceResult.severity,
         coordinates: [longitude, latitude]
       });
+
+      // Send FCM notification
+      if (tourist.fcm_token) {
+        try {
+          await notificationService.sendNotification(
+            tourist.fcm_token,
+            "⚠️ Danger Zone",
+            "You entered a restricted area!"
+          );
+        } catch (err) {
+          logger.error('Failed to send FCM for geofence:', err);
+        }
+      }
     }
 
     logger.info('Location updated', {
@@ -106,7 +146,15 @@ const updateLocation = async (req, res) => {
         id: location._id,
         coordinates: [longitude, latitude],
         timestamp: location.timestamp,
-        geofence_alert: geofenceResult.violation
+        geofence_alert: geofenceResult.violation,
+        // Include zone details for the mobile app warning banner
+        ...(geofenceResult.violation ? {
+          zone_name: geofenceResult.zoneName,
+          zone_type: geofenceResult.zoneType,
+          severity: geofenceResult.severity,
+          description: geofenceResult.description,
+          distance: geofenceResult.distance
+        } : {})
       }
     });
 
