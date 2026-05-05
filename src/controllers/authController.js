@@ -70,6 +70,7 @@ const registerTourist = async (req, res) => {
 const loginTourist = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('🔑 Login attempt received:', { email, body: req.body });
 
     if (!email || !password) {
       return res.status(400).json({
